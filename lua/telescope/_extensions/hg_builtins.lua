@@ -238,6 +238,51 @@ M.log = function(opts)
     }):find()
 end
 
+M.xl = function(opts)
+    opts = opts or {}
+    local command = {
+        "hg", "xl", "-G",
+        '--template={rev} {if(tags,\'[{tags}] \')}{desc|strip|firstline} ({author|user} {date|age})\n'
+    }
+    opts.entry_maker = function(entry)
+        local rev = string.match(entry, "(%d+) (.+)")
+        return {
+            value = entry,
+            ordinal = entry,
+            rev = rev,
+            display = function(self)
+                return self.value, highlight_glog(self.value)
+            end
+        }
+    end
+
+    pickers.new(opts, {
+        prompt_title = "Commits",
+        finder = finders.new_oneshot_job(command, opts),
+        previewer = {
+            previewers.new_buffer_previewer {
+                title = 'hg diff',
+                define_preview = function(self, entry)
+                    local rev = entry_get_rev(entry)
+                    if rev == nil then return end
+                    local cmd = {"hg", "diff", "-c", rev}
+                    putils.job_maker(cmd, self.state.bufnr, {
+                        value = rev,
+                        bufname = self.state.bufname,
+                        cwd = opts.cwd
+                    })
+                    putils.regex_highlighter(self.state.bufnr, "diff")
+                end
+            }
+        },
+        sorter = conf.file_sorter(opts),
+        attach_mappings = function()
+            actions.select_default:replace(checkout)
+            return true
+        end
+    }):find()
+end
+
 local hightlightlog = function(bufnr, content)
     local ns_previewer = vim.api.nvim_create_namespace "telescope.previewers"
     for i = 1, #content do
@@ -412,9 +457,37 @@ end
 
 M.files = function(opts)
     opts = opts or {}
-    local show_untracked = utils.get_default(opts.show_untracked, true)
+    local show_untracked = vim.F.if_nil(opts.show_untracked, true)
 
     local results = utils.get_os_command_output({'hg', 'files'}, opts.cwd)
+    if show_untracked then
+        local untracked = utils.get_os_command_output({'hg', 'status', '-u'},
+                                                      opts.cwd)
+        if untracked ~= nil and #untracked ~= 0 then
+            for k, v in pairs(untracked) do
+                v = v:gsub("^%s*?%s*", "")
+                table.insert(results, #results + 1, v)
+            end
+        end
+    end
+    if #results == 0 then return end
+
+    pickers.new(opts, {
+        prompt_title = "Hg Files",
+        finder = finders.new_table {
+            results = results,
+            entry_maker = require'telescope.make_entry'.gen_from_file(opts)
+        },
+        previewer = conf.file_previewer(opts),
+        sorter = conf.file_sorter(opts)
+    }):find()
+end
+
+M.list = function(opts)
+    opts = opts or {}
+    local show_untracked = vim.F.if_nil(opts.show_untracked, true)
+
+    local results = utils.get_os_command_output({'hg', 'list'}, opts.cwd)
     if show_untracked then
         local untracked = utils.get_os_command_output({'hg', 'status', '-u'},
                                                       opts.cwd)
