@@ -8,12 +8,14 @@ local action_state = require "telescope.actions.state"
 local actions = require "telescope.actions"
 local utils = require "telescope.utils"
 local strings = require "plenary.strings"
+local sorters = require "telescope.sorters"
 
 local function get_root(opts)
     return utils.get_os_command_output({'hg', 'root'}, opts.cwd)[1] .. '/'
 end
 
 local M = {};
+entry_count = 0;
 
 M.logthis = function(opts)
     opts = opts or {}
@@ -256,9 +258,44 @@ M.xl = function(opts)
         }
     end
 
+    -- opts.sorter = sorters.empty
+    local return_descending_order = function(opts)
+      opts = opts or {}
+      local fzy = opts.fzy_mod or require "telescope.algos.fzy"
+
+      return sorters.Sorter:new {
+        discard = true,
+
+        scoring_function = function(_, prompt, line)
+          -- Check for actual matches before running the scoring alogrithm.
+          -- print(vim.inspect(prompt))
+          -- print(vim.inspect(line))
+          entry_count = entry_count - 1
+          -- print(vim.inspect(entry_count))
+          return entry_count
+        end,
+
+        -- The fzy.positions function, which returns an array of string indices, is
+        -- compatible with telescope's conventions. It's moderately wasteful to
+        -- call call fzy.score(x,y) followed by fzy.positions(x,y): both call the
+        -- fzy.compute function, which does all the work. But, this doesn't affect
+        -- perceived performance.
+        highlighter = function(_, prompt, display)
+          return fzy.positions(prompt, display)
+        end,
+      }
+    end
+
+    local my_finders = function(command, opts)
+      entry_count = 0
+      local result = finders.new_oneshot_job(command, opts);
+      return result;
+    end
+
     pickers.new(opts, {
         prompt_title = "Commits",
-        finder = finders.new_oneshot_job(command, opts),
+        -- finder = finders.new_oneshot_job(command, opts),
+        finder = my_finders(command, opts),
         previewer = {
             previewers.new_buffer_previewer {
                 title = 'hg diff',
@@ -275,7 +312,7 @@ M.xl = function(opts)
                 end
             }
         },
-        sorter = conf.file_sorter(opts),
+        sorter = return_descending_order(),
         attach_mappings = function()
             actions.select_default:replace(checkout)
             return true
