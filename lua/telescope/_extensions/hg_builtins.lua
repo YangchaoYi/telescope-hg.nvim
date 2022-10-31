@@ -269,7 +269,7 @@ M.xl = function(opts)
         scoring_function = function(_, prompt, line)
           -- Check for actual matches before running the scoring alogrithm.
           -- print(vim.inspect(prompt))
-          -- print(vim.inspect(line))
+          print(vim.inspect(line))
           entry_count = entry_count - 1
           -- print(vim.inspect(entry_count))
           return entry_count
@@ -287,7 +287,7 @@ M.xl = function(opts)
     end
 
     local my_finders = function(command, opts)
-      entry_count = 0
+      entry_count = -1
       local result = finders.new_oneshot_job(command, opts);
       return result;
     end
