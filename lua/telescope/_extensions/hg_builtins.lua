@@ -259,20 +259,43 @@ M.xl = function(opts)
     end
 
     -- opts.sorter = sorters.empty
-    local return_descending_order = function(opts)
+    local fzy_with_descending_order = function(opts)
       opts = opts or {}
       local fzy = opts.fzy_mod or require "telescope.algos.fzy"
+      local OFFSET = -fzy.get_score_floor()
 
       return sorters.Sorter:new {
         discard = true,
 
         scoring_function = function(_, prompt, line)
-          -- Check for actual matches before running the scoring alogrithm.
-          -- print(vim.inspect(prompt))
-          print(vim.inspect(line))
+          -- print(vim.inspect(line))
           entry_count = entry_count - 1
-          -- print(vim.inspect(entry_count))
-          return entry_count
+          -- Check for actual matches before running the scoring alogrithm.
+          if not fzy.has_match(prompt, line) then
+            return -1
+          end
+
+          local fzy_score = fzy.score(prompt, line)
+
+          -- The fzy score is -inf for empty queries and overlong strings.  Since
+          -- this function converts all scores into the range (0, 1), we can
+          -- convert these to 1 as a suitable "worst score" value.
+          if fzy_score == fzy.get_score_min() then
+            return entry_count
+          end
+
+          -- Poor non-empty matches can also have negative values. Offset the score
+          -- so that all values are positive, then invert to match the
+          -- telescope.Sorter "smaller is better" convention. Note that for exact
+          -- matches, fzy returns +inf, which when inverted becomes 0.
+          return 1 / (fzy_score + OFFSET)
+
+          -- Fixed descending order
+          -- -- print(vim.inspect(prompt))
+          -- print(vim.inspect(line))
+          -- entry_count = entry_count - 1
+          -- -- print(vim.inspect(entry_count))
+          -- return entry_count
         end,
 
         -- The fzy.positions function, which returns an array of string indices, is
@@ -312,7 +335,7 @@ M.xl = function(opts)
                 end
             }
         },
-        sorter = return_descending_order(),
+        sorter = fzy_with_descending_order(),
         attach_mappings = function()
             actions.select_default:replace(checkout)
             return true
